@@ -16,26 +16,24 @@ const upload = multer({ storage: multer.memoryStorage() });
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.post('/api/virtual-tryon', upload.fields([
-    { name: 'human', maxCount: 1 },
-    { name: 'garment', maxCount: 1 }
-]), async (req, res) => {
-    try {
+const getRapidApiKey = (keyIndex) => {
+    return process.env[`API_KEY${keyIndex}`];
+};
 
+let errorOnApiCall = 0;
+async function generateSegmentedCloth(req, res, headers) {
+    try {
         const formData = new FormData();
         formData.append('clothing_image', req.files['garment'][0].buffer, 'garment.jpg');
         formData.append('avatar_image', req.files['human'][0].buffer, 'human.jpg');
 
-        const headers = {
-            'x-rapidapi-host': process.env.RAPIDAPI_HOST,
-            'x-rapidapi-key': process.env.API_KEY,
+        const _headers = {
+            ...headers,
             ...formData.getHeaders()
         };
 
-        console.log(formData)
-
         const response = await axios.post(process.env.RAPID_URL, formData, {
-            headers: headers,
+            headers: _headers,
             responseType: 'arraybuffer'
         });
 
@@ -53,16 +51,42 @@ app.post('/api/virtual-tryon', upload.fields([
 
             const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${imageName}`;
 
-            res.json({
+            return {
+                code: 200,
                 success: true,
                 imageUrl: imageUrl
-            });
+            }
         } else {
-            res.status(400).json({
+            return {
+                code: 400,
                 success: false,
                 error: 'Unexpected response format from the external API'
-            });
+            }
         }
+    } catch (error) {
+        errorOnApiCall += 1;
+        const headers = {
+            'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+            'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
+        }
+        return await generateSegmentedCloth(req, res, headers)
+    }
+
+}
+
+app.post('/api/virtual-tryon', upload.fields([
+    { name: 'human', maxCount: 1 },
+    { name: 'garment', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const headers = {
+            'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+            'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
+        }
+        const data = await generateSegmentedCloth(req, res, headers);
+        res.status(data.code).json({
+            ...data
+        });
     } catch (error) {
         console.error('Error forwarding the request:', error);
         res.status(500).json({
