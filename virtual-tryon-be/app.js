@@ -21,7 +21,7 @@ const getRapidApiKey = (keyIndex) => {
 };
 
 let errorOnApiCall = 0;
-async function generateSegmentedCloth(req, res, headers) {
+async function generateSegmentedCloth(req, headers) {
     try {
         const formData = new FormData();
         formData.append('clothing_image', req.files['garment'][0].buffer, 'garment.jpg');
@@ -69,7 +69,7 @@ async function generateSegmentedCloth(req, res, headers) {
             'x-rapidapi-host': process.env.RAPIDAPI_HOST,
             'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
         }
-        return await generateSegmentedCloth(req, res, headers)
+        return await generateSegmentedCloth(req, headers)
     }
 
 }
@@ -83,7 +83,7 @@ app.post('/api/virtual-tryon', upload.fields([
             'x-rapidapi-host': process.env.RAPIDAPI_HOST,
             'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
         }
-        const data = await generateSegmentedCloth(req, res, headers);
+        const data = await generateSegmentedCloth(req, headers);
         res.status(data.code).json({
             ...data
         });
