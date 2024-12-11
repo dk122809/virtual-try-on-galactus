@@ -59,12 +59,12 @@ function App() {
   };
 
   const presetImaagesArray = [
-    'men_1.png',
-    'men_2.png',
-    'men_3.jpg',
-    'women_1.png',
-    'women_2.png',
-    'women_3.png',
+    'male_01.jpg',
+    'male_02.jpg',
+    'male_04.jpg',
+    'female_01.jpg',
+    'female_03.jpg',
+    'female_06.jpg',
   ];
 
   const commonStyles = {
