@@ -13,7 +13,10 @@ app.use(cors())
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+let __dirname = path.dirname(new URL(import.meta.url).pathname);
+__dirname = __dirname.replace(/\\/g, '/'); // Use forward slashes for consistency
+__dirname = __dirname.replace(/^\/C:/, 'C:'); // Remove any leading slash before C:
+console.log(__dirname)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const getRapidApiKey = (keyIndex) => {
@@ -40,13 +43,18 @@ async function generateSegmentedCloth(req, headers) {
         if (response.headers['content-type'].startsWith('image/')) {
             const imageBuffer = Buffer.from(response.data);
             const imageName = `output_${Date.now()}.webp`;
-            const __dirname = path.dirname(new URL(import.meta.url).pathname);
-            const imagePath = path.join(__dirname, 'uploads', imageName);
+            const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/\\/g, '/').replace(/^\/C:/, 'C:');
+            let imagePath = path.join(__dirname, 'uploads', imageName);
 
             if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
                 fs.mkdirSync(path.join(__dirname, 'uploads'));
             }
+            // imagePath = imagePath.replace(/\\/g, '\\\\');
 
+            // // Remove duplicate 'C:\\' at the start of the path
+            // imagePath = imagePath.replace(/^C:\\+/, 'C:\\');
+            // imagePath = imagePath.replace(/^\\\\C:\\+/, 'C:\\')
+            console.log(imagePath);
             fs.writeFileSync(imagePath, imageBuffer);
 
             const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${imageName}`;
@@ -65,11 +73,15 @@ async function generateSegmentedCloth(req, headers) {
         }
     } catch (error) {
         errorOnApiCall += 1;
-        const headers = {
-            'x-rapidapi-host': process.env.RAPIDAPI_HOST,
-            'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
+        if (errorOnApiCall <= 2) {
+            const headers = {
+                'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+                'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
+            }
+            // No infinite loop please
+            return await generateSegmentedCloth(req, headers)
         }
-        return await generateSegmentedCloth(req, headers)
+        console.log(error.message);
     }
 
 }
