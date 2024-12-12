@@ -96,7 +96,7 @@ app.post('/api/virtual-tryon', upload.fields([
             'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
         }
         const data = await generateSegmentedCloth(req, headers);
-        res.status(data.code).json({
+        res.status(data?.code || 400).json({
             ...data
         });
     } catch (error) {
