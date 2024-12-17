@@ -54,7 +54,7 @@ function App() {
       const intervalId = setInterval(() => {
         setLoadingPercentage((prevPercentage) => {
           const newPercentage = prevPercentage + 1.25;
-          if (newPercentage >= 100) {
+          if (newPercentage >= 96) {
             clearInterval(intervalId);
           }
           return newPercentage;
@@ -66,7 +66,7 @@ function App() {
           "Connection": "keep-alive"
         },
       });
-
+      setLoadingPercentage(100)
       setResponseImage(response.data.imageUrl);
     } catch (error) {
       console.error('Error uploading images:', error);
