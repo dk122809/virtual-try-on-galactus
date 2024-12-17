@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Box, Container, Typography } from "@mui/material";
+import { Box, Container, Typography, Button } from "@mui/material";
 import Grid from '@mui/system/Grid';
 import LoadingButton from '@mui/lab/LoadingButton';
 import Header from './components/layout/header';
 import FileUpload from './components/fileUpload';
+import DownloadButton from './components/downloadButton';
 
 function App() {
   const [selectedImage, setSelectedImage] = useState(null);
@@ -16,7 +17,7 @@ function App() {
 
   const handleImageChange = (file) => {
     setSelectedImage(URL.createObjectURL(file));
-    setGarmentImage(file)
+    setGarmentImage(file);
   };
 
   const handlePresetImageSelect = (image) => {
@@ -25,7 +26,6 @@ function App() {
       .then((response) => response.blob())
       .then((blob) => {
         setHumanImage(blob);
-
       })
       .catch((err) => {
         console.error('Error loading image:', err);
@@ -60,11 +60,11 @@ function App() {
 
   const presetImaagesArray = [
     'male_01.jpg',
-    'male_02.jpg',
+    '009.jpg',
     'male_04.jpg',
-    'female_01.jpg',
-    'female_03.jpg',
-    'female_06.jpg',
+    '001.png',
+    '002.png',
+    '004.jpg',
   ];
 
   const commonStyles = {
@@ -88,17 +88,13 @@ function App() {
           <Grid container spacing={2}>
             <Grid size={6}>
               <div className='clothSelector'>
-                <div class="step">
-                  1
-                </div>
+                <div className="step">1</div>
                 <Typography fontWeight="bold">Upload an image of clothes</Typography>
                 <FileUpload handleImageChange={handleImageChange} />
               </div>
               <Box sx={{ m: 5 }} />
               <div className='modelSelector'>
-                <div class="step">
-                  2
-                </div>
+                <div className="step">2</div>
                 <Typography fontWeight="bold">Choose the model</Typography>
                 {presetImaagesArray.map((image, index) => (
                   <Box sx={{
@@ -121,21 +117,33 @@ function App() {
               <div className='resultContainer'>
                 <img
                   src={responseImage}
+                  alt="Generated result"
+                />
+              </div>
+              <div className='downloadBtn' style={{ marginTop: '20px' }}>
+                <DownloadButton
+                  imageUrl={responseImage}
+                  disabled={responseImage === "/images/no-image.jpg"}
                 />
               </div>
 
               <div className='submitBtn'>
-                <LoadingButton variant="contained" color='secondary' fullWidth={true} loading={isloading} disabled={false} onClick={handleSubmit}>
+                <LoadingButton
+                  variant="contained"
+                  color='secondary'
+                  fullWidth={true}
+                  loading={isloading}
+                  disabled={false}
+                  onClick={handleSubmit}
+                >
                   Generate
                 </LoadingButton>
               </div>
             </Grid>
-
           </Grid>
         </Box>
       </Container>
     </div>
-
   );
 }
 

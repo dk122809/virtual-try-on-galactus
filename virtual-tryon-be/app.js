@@ -1,11 +1,9 @@
 import express from 'express';
 import multer from 'multer';
 import axios from 'axios';
-import FormData from 'form-data';
-import fs from 'fs';
-import path from 'path';
 import dotenv from 'dotenv';
-import cors from "cors"
+import cors from "cors";
+import jwt from "jsonwebtoken";
 dotenv.config();
 
 const app = express();
@@ -13,56 +11,70 @@ app.use(cors())
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-let __dirname = path.dirname(new URL(import.meta.url).pathname);
-__dirname = __dirname.replace(/\\/g, '/'); // Use forward slashes for consistency
-__dirname = __dirname.replace(/^\/C:/, 'C:'); // Remove any leading slash before C:
-console.log(__dirname)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const getAkSK = (keyIndex) => {
+    console.log(keyIndex)
+    return {
+        ak: process.env[`ACCESS_KEY${keyIndex}`],
+        sk: process.env[`SECRET_KEY${keyIndex}`],
+    }
+}
 
-const getRapidApiKey = (keyIndex) => {
-    return process.env[`API_KEY${keyIndex}`];
-};
+function encodeJwtToken(ak, sk) {
+    const payload = {
+        iss: ak,
+        exp: Math.floor(Date.now() / 1000) + 1800,
+        nbf: Math.floor(Date.now() / 1000) - 5
+    };
+
+    const token = jwt.sign(payload, sk, { algorithm: 'HS256' });
+    return token;
+}
 
 let errorOnApiCall = 0;
-async function generateSegmentedCloth(req, headers) {
+async function generateSegmentedCloth(req, ak, sk) {
     try {
-        const formData = new FormData();
-        formData.append('clothing_image', req.files['garment'][0].buffer, 'garment.jpg');
-        formData.append('avatar_image', req.files['human'][0].buffer, 'human.jpg');
+        const token = encodeJwtToken(ak, sk)
+        const body = {
+            cloth_image: req.files['garment'][0].buffer.toString('base64'),
+            human_image: req.files['human'][0].buffer.toString('base64'),
+            model_name: "kolors-virtual-try-on-v1-1"
+        }
 
-        const _headers = {
-            ...headers,
-            ...formData.getHeaders()
+        let config = {
+            method: 'post',
+            maxBodyLength: Infinity,
+            url: process.env.KLING_API_BASE_URL,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            data: JSON.stringify(body)
         };
 
-        const response = await axios.post(process.env.RAPID_URL, formData, {
-            headers: _headers,
-            responseType: 'arraybuffer'
-        });
+        const response = await axios.request(config)
 
-        if (response.headers['content-type'].startsWith('image/')) {
-            const imageBuffer = Buffer.from(response.data);
-            const imageName = `output_${Date.now()}.webp`;
-            const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/\\/g, '/').replace(/^\/C:/, 'C:');
-            let imagePath = path.join(__dirname, 'uploads', imageName);
+        if (response?.status === 200) {
+            console.log('Waiting for 20 seconds before calling the second API...');
 
-            if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
-                fs.mkdirSync(path.join(__dirname, 'uploads'));
-            }
-            // imagePath = imagePath.replace(/\\/g, '\\\\');
+            // Wait for 20 seconds
+            await new Promise(resolve => setTimeout(resolve, 20000));
 
-            // // Remove duplicate 'C:\\' at the start of the path
-            // imagePath = imagePath.replace(/^C:\\+/, 'C:\\');
-            // imagePath = imagePath.replace(/^\\\\C:\\+/, 'C:\\')
-            console.log(imagePath);
-            fs.writeFileSync(imagePath, imageBuffer);
+            let _config = {
+                method: 'get',
+                maxBodyLength: Infinity,
+                url: `${process.env.KLING_API_BASE_URL}/${response?.data?.request_id}`,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            };
+            const _response = await axios.request(_config)
 
-            const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${imageName}`;
-
+            console.log(_response?.data?.data?.task_result?.images?.[0]?.url)
             return {
                 code: 200,
                 success: true,
-                imageUrl: imageUrl
+                imageUrl: _response?.data?.data?.task_result?.images?.[0]?.url
             }
         } else {
             return {
@@ -72,16 +84,14 @@ async function generateSegmentedCloth(req, headers) {
             }
         }
     } catch (error) {
+        console.log(error);
         errorOnApiCall += 1;
         if (errorOnApiCall <= 2) {
-            const headers = {
-                'x-rapidapi-host': process.env.RAPIDAPI_HOST,
-                'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
-            }
+            const { ak, sk } = getAkSK(errorOnApiCall)
             // No infinite loop please
-            return await generateSegmentedCloth(req, headers)
+            return await generateSegmentedCloth(req, ak, sk)
         }
-        console.log(error.message);
+
     }
 
 }
@@ -91,11 +101,9 @@ app.post('/api/virtual-tryon', upload.fields([
     { name: 'garment', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const headers = {
-            'x-rapidapi-host': process.env.RAPIDAPI_HOST,
-            'x-rapidapi-key': getRapidApiKey(errorOnApiCall),
-        }
-        const data = await generateSegmentedCloth(req, headers);
+        const ak = process.env.ACCESS_KEY0;
+        const sk = process.env.SECRET_KEY0;
+        const data = await generateSegmentedCloth(req, ak, sk);
         res.status(data?.code || 400).json({
             ...data
         });
