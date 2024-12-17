@@ -3,78 +3,102 @@ import multer from 'multer';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import cors from "cors";
-import jwt from "jsonwebtoken";
+import { v2 as cloudinary } from 'cloudinary';
+import streamifier from 'streamifier';
 dotenv.config();
 
 const app = express();
 app.use(cors())
 
 const upload = multer({ storage: multer.memoryStorage() });
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_NAME,
+    api_key: process.env.CLOUDINARY_KEY,
+    api_secret: process.env.CLOUDINARY_SECRET,
+});
 
 const getAkSK = (keyIndex) => {
     console.log(keyIndex)
-    return {
-        ak: process.env[`ACCESS_KEY${keyIndex}`],
-        sk: process.env[`SECRET_KEY${keyIndex}`],
-    }
+    return process.env[`KLING_API_KEY${keyIndex}`];
 }
 
-function encodeJwtToken(ak, sk) {
-    const payload = {
-        iss: ak,
-        exp: Math.floor(Date.now() / 1000) + 1800,
-        nbf: Math.floor(Date.now() / 1000) - 5
-    };
-
-    const token = jwt.sign(payload, sk, { algorithm: 'HS256' });
-    return token;
+async function uploadImageToCloudinary(buffer, folder) {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            { folder },
+            (error, result) => {
+                if (error) return reject(error);
+                resolve(result.secure_url);
+            }
+        );
+        streamifier.createReadStream(buffer).pipe(stream);
+    });
 }
 
 let errorOnApiCall = 0;
-async function generateSegmentedCloth(req, ak, sk) {
+async function generateSegmentedCloth(req, api_key) {
     try {
-        const token = encodeJwtToken(ak, sk)
-        const body = {
-            cloth_image: req.files['garment'][0].buffer.toString('base64'),
-            human_image: req.files['human'][0].buffer.toString('base64'),
-            model_name: "kolors-virtual-try-on-v1-1"
+        const garmentImageUrl = await uploadImageToCloudinary(
+            req.files["garment"][0].buffer,
+            "garments"
+        );
+        const humanImageUrl = await uploadImageToCloudinary(
+            req.files["human"][0].buffer,
+            "humans"
+        );
+        const { garment_type } = req.body;
+
+        let data = {
+            "model": "kling",
+            "task_type": "ai_try_on",
+            "input": {
+                "model_input": humanImageUrl,
+                "batch_size": 1
+            }
+        };
+        if (garment_type === "Top") {
+            data.input.upper_input = garmentImageUrl;
+        } else if (garment_type === "Bottom") {
+            data.input.lower_input = garmentImageUrl;
+        } else {
+            data.input.dress_input = garmentImageUrl;
         }
 
         let config = {
             method: 'post',
             maxBodyLength: Infinity,
-            url: process.env.KLING_API_BASE_URL,
+            url: 'https://api.piapi.ai/api/v1/task',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'x-api-key': api_key,
+                'Content-Type': 'application/json'
             },
-            data: JSON.stringify(body)
+            data: JSON.stringify(data)
         };
 
         const response = await axios.request(config)
 
         if (response?.status === 200) {
-            console.log('Waiting for 20 seconds before calling the second API...');
+            console.log('Waiting for 80 seconds before calling the second API...');
 
             // Wait for 20 seconds
-            await new Promise(resolve => setTimeout(resolve, 20000));
+            await new Promise(resolve => setTimeout(resolve, 80000));
+            console.log("calling api")
 
             let _config = {
                 method: 'get',
                 maxBodyLength: Infinity,
-                url: `${process.env.KLING_API_BASE_URL}/${response?.data?.request_id}`,
+                url: `https://api.piapi.ai/api/v1/task/${response?.data?.data?.task_id}`,
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'x-api-key': api_key
                 }
             };
             const _response = await axios.request(_config)
 
-            console.log(_response?.data?.data?.task_result?.images?.[0]?.url)
+            console.log(_response?.data?.data?.output?.works?.[0]?.image?.resource_without_watermark)
             return {
                 code: 200,
                 success: true,
-                imageUrl: _response?.data?.data?.task_result?.images?.[0]?.url
+                imageUrl: _response?.data?.data?.output?.works?.[0]?.image?.resource_without_watermark
             }
         } else {
             return {
@@ -87,9 +111,9 @@ async function generateSegmentedCloth(req, ak, sk) {
         console.log(error);
         errorOnApiCall += 1;
         if (errorOnApiCall <= 2) {
-            const { ak, sk } = getAkSK(errorOnApiCall)
+            const api_key = getAkSK(errorOnApiCall)
             // No infinite loop please
-            return await generateSegmentedCloth(req, ak, sk)
+            return await generateSegmentedCloth(req, api_key)
         }
 
     }
@@ -101,9 +125,8 @@ app.post('/api/virtual-tryon', upload.fields([
     { name: 'garment', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const ak = process.env.ACCESS_KEY0;
-        const sk = process.env.SECRET_KEY0;
-        const data = await generateSegmentedCloth(req, ak, sk);
+        const api_key = process.env.KLING_API_KEY0
+        const data = await generateSegmentedCloth(req, api_key);
         res.status(data?.code || 400).json({
             ...data
         });
