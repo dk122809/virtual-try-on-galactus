@@ -41,6 +41,8 @@ function App() {
       alert('Please upload the image and select preset image!');
       return;
     }
+    setLoadingPercentage(0);
+    setResponseImage("/images/no-image.jpg")
 
     const formData = new FormData();
     formData.append('human', humanImage);

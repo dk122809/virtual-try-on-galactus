@@ -35,6 +35,17 @@ async function uploadImageToCloudinary(buffer, folder) {
     });
 }
 
+async function uploadImage(image) {
+    const uploadResult = await cloudinary.uploader
+        .upload(
+            image
+        )
+        .catch((error) => {
+            console.log(error);
+        });
+    return uploadResult
+}
+
 let errorOnApiCall = 0;
 async function generateSegmentedCloth(req, api_key) {
     try {
@@ -94,11 +105,13 @@ async function generateSegmentedCloth(req, api_key) {
             };
             const _response = await axios.request(_config)
 
+            const uploadResult = await uploadImage(_response?.data?.data?.output?.works?.[0]?.image?.resource_without_watermark)
+
             console.log(_response?.data?.data?.output?.works?.[0]?.image?.resource_without_watermark)
             return {
                 code: 200,
                 success: true,
-                imageUrl: _response?.data?.data?.output?.works?.[0]?.image?.resource_without_watermark
+                imageUrl: uploadResult?.url
             }
         } else {
             return {
